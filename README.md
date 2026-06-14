@@ -10,7 +10,7 @@ appears as a property named `$completion` (or `arg1` when compiled without
 suspend fun fetch(@ToolParam(description = "the url to fetch") url: String): String = url
 ```
 
-compiles to `fetch(String, Continuation)` on the JVM, and the generated schema becomes:
+compiles to `fetch(url: String, $completion: Continuation)` on the JVM, and the generated schema becomes:
 
 ```json
 {
@@ -52,12 +52,15 @@ The version can be overridden within the 2.0.x line, e.g. `./gradlew run -Psprin
 
 ## Why it matters
 
-- The model is asked to provide a `$completion` argument that has no meaning to it. On the
-  `@Tool` path the schema also sets `additionalProperties: false`, so it is internally
-  inconsistent (a required property the caller cannot legitimately supply).
-- Tool invocation runs through `MethodToolCallback` / `AbstractMcpToolMethodCallback`, which
-  call `Method.invoke`. A real `Continuation` is never supplied, so a `suspend` tool cannot
-  be invoked successfully either.
+`$completion` is not a real tool parameter — it is an artifact of how Kotlin compiles
+`suspend` functions to JVM bytecode. It is added to the schema's `required` array, so the
+model is asked to provide an argument that has no meaning to it and is not part of the
+tool's input.
+
+Kotlin `suspend` functions are not supported as tools today: there is no coroutine handling
+in the tool path, and tool methods are invoked via `Method.invoke` (in `MethodToolCallback` /
+`AbstractMcpToolMethodCallback`). This reproduction covers the schema-generation side of that
+gap; broader `suspend` support is requested in #3718.
 
 ## Root cause
 
