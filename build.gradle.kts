@@ -17,6 +17,10 @@ dependencies {
 	implementation("org.springframework.ai:spring-ai-mcp-annotations:$springAiVersion")
 	implementation(kotlin("reflect"))
 
+	// The reproduction does no logging of its own; bind SLF4J to a no-op backend
+	// so the schema output is not preceded by "no SLF4J providers" warnings.
+	runtimeOnly("org.slf4j:slf4j-nop:2.0.17")
+
 	testImplementation(kotlin("test"))
 	testImplementation(platform("org.junit:junit-bom:5.11.4"))
 	testImplementation("org.junit.jupiter:junit-jupiter")
