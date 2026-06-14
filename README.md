@@ -24,55 +24,25 @@ compiles to `fetch(url: String, $completion: Continuation)` on the JVM, and the 
 }
 ```
 
-## Affected code paths
+This affects both the `@Tool` path (`JsonSchemaGenerator`) and the `@McpTool` path
+(`McpJsonSchemaGenerator`). Since the Spring AI MCP server exposes `@Tool` `ToolCallback`s
+over MCP, the `@Tool` path applies to Kotlin MCP servers as well, not only to direct
+chat-model tool calling.
 
-| Annotation | Generator | Module |
-| --- | --- | --- |
-| `@Tool` | `org.springframework.ai.util.json.schema.JsonSchemaGenerator#generateForMethodInput` | `spring-ai-model` |
-| `@McpTool` | `org.springframework.ai.mcp.annotation.method.tool.utils.McpJsonSchemaGenerator#generateForMethodInput` | `spring-ai-mcp-annotations` |
-
-The Spring AI MCP server exposes `@Tool` `ToolCallback`s over MCP, so the `@Tool` path
-applies to Kotlin MCP servers as well, not only to direct chat-model tool calling.
-
-## Verified
-
-| Version | `@Tool` path | `@McpTool` path |
-| --- | --- | --- |
-| `2.0.1-SNAPSHOT` (main) | reproduced | reproduced |
-| `1.1.8` (release) | reproduced | n/a — the `@McpTool` annotation path was introduced in 2.0.x |
-
-## How to run
+## Run
 
 ```bash
-./gradlew run     # prints the generated schemas for both paths (main / 2.0.1-SNAPSHOT)
-./gradlew test    # asserts the continuation parameter is absent — fails on current versions
+./gradlew run     # prints the generated schemas for both paths
+./gradlew test    # asserts the continuation parameter is absent (fails until the fix ships)
 ```
 
-The version can be overridden within the 2.0.x line, e.g. `./gradlew run -PspringAiVersion=2.0.0`.
+Defaults to `2.0.1-SNAPSHOT` (main); override within the 2.0.x line with `-PspringAiVersion=2.0.0`.
 
-## Why it matters
+## Reproduced on
 
-`$completion` is not a real tool parameter — it is an artifact of how Kotlin compiles
-`suspend` functions to JVM bytecode. It is added to the schema's `required` array, so the
-model is asked to provide an argument that has no meaning to it and is not part of the
-tool's input.
+| Version | `@Tool` | `@McpTool` |
+| --- | --- | --- |
+| `2.0.1-SNAPSHOT` (main) | reproduced | reproduced |
+| `1.1.8` | reproduced | n/a — the `@McpTool` annotation path was introduced in 2.0.x |
 
-Kotlin `suspend` functions are not supported as tools today: there is no coroutine handling
-in the tool path, and tool methods are invoked via `Method.invoke` (in `MethodToolCallback` /
-`AbstractMcpToolMethodCallback`). This reproduction covers the schema-generation side of that
-gap; broader `suspend` support is requested in #3718.
-
-## Root cause
-
-Both generators iterate the method parameters and skip framework-supplied parameter types
-(`ToolContext`, and the MCP infrastructure types in the MCP generator), but they do not skip
-the trailing synthetic `Continuation` parameter of a `suspend` function. There is no
-suspend/coroutine handling anywhere in the tool path.
-
-## A possible fix
-
-Skip the trailing `kotlin.coroutines.Continuation` parameter when
-`org.springframework.core.KotlinDetector.isSuspendingFunction(method)` is `true` (guarded by
-`KotlinDetector.isKotlinReflectPresent()`), in both `JsonSchemaGenerator` and
-`McpJsonSchemaGenerator`. This corrects the generated schema independently of whether tool
-invocation gains full coroutine support.
+Full analysis and fix: https://github.com/spring-projects/spring-ai/pull/6418
